@@ -1,6 +1,8 @@
+THIS IS TO SHOW HOW GIT WORKS
+
 Last login: Wed Aug 26 14:19:34 on ttys001
 Admins-MacBook-Air-2:~ freyapentz$ ipython
-Python 2.7.10 |Anaconda 2.3.0 (x86_64)| (default, May 28 2015, 17:04:42) 
+Python 2.7.10 |Anaconda 2.3.0 (x86_64)| (default, May 28 2015, 17:04:42)
 Type "copyright", "credits" or "license" for more information.
 
 IPython 3.2.0 -- An enhanced Interactive Python.
@@ -27,8 +29,8 @@ In [7]: import json
 
 In [8]: from ast import literal_eval
 
-In [9]: filename = '/Users/freyapentz/Desktop/gz_bar_lengths_classifications_2015-08-24.csv' 
+In [9]: filename = '/Users/freyapentz/Desktop/gz_bar_lengths_classifications_2015-08-24.csv'
 
 In [10]: classifications = pd.read_csv(filename, low_memory=False)
 
-In [11]: 
+In [11]:
