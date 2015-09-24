@@ -314,7 +314,7 @@ my_data['spiral'] = spiral
 my_data.columns = "RA DEC Z length width absolute_mag ring_presence spiral_arms".split()
 
 #save to file. Now you have a file with pretty much all the data in it which you can now use for TOPCAT or
-#something. Yay!
+#something.
 
 my_data.to_csv('/Users/freyapentz/Documents/my_data2.csv', index = False)
 
