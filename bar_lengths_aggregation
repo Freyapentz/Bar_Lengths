@@ -1,0 +1,323 @@
+#1
+import sys
+import numpy as np
+import pandas as pd
+import datetime
+import dateutil.parser
+import csv
+import json
+import astropy
+import matplotlib.pyplot as plt
+import math
+from astropy import cosmology as C
+from astropy import units
+from astropy import constants as const
+from astropy import coordinates
+from astropy.table import Table
+from astropy.cosmology import FlatLambdaCDM
+cosmo = FlatLambdaCDM(H0=70, Om0=0.3)
+from astropy.cosmology import WMAP7
+
+#2
+
+"""you should have two files, one with the classifications people have done, so all the answers to the questions along with the subject data, and also a file that tells you what database the galaxies come from (COSMOS, AEGIS etc. classifications_filename should be the name of the file that has the classifications in and all_subject_data_filename should be the one that has the database in)"""
+
+classifications_filename = '/Users/freyapentz/Documents/66000_classifications.csv'
+all_subject_data_filename = '/Users/freyapentz/Documents/input_csv_files/gz_bar_lengths_all_subject_data.csv'
+
+#read in the data
+cl = pd.read_csv(classifications_filename, low_memory=False)
+subj_set_data = pd.read_csv(all_subject_data_filename, low_memory=False)
+
+#contains only the annotations
+anno_array = cl.annotations
+
+#get the data into a format you can analyse
+cl.anno_array = cl.annotations.apply(json.loads)
+subject_data = cl.subject_data.apply(json.loads)
+subj_set = subj_set_data.metadata.apply(json.loads)
+subject_id = subj_set_data.subject_id
+
+#3
+
+#get IDs for the galaxies in all the classifications
+subjidstr_all = [int(q[2:9].replace('"', '').replace('{', '')) for q in cl.subject_data]
+
+#this function gives you the ids for only the galaxies with valid measurements i.e. length and width measured
+def get_subjidstr(x, y):
+    ids_again = []
+    for i, j in enumerate(x):
+        if y[i][0]['value'] == 'Yes' and len(y[i]) > 3 and len(y[i][3]['value']) > 1:
+            ids_again.append(j)
+    return ids_again
+
+#list with ids that correspond only to classifications with two measurements
+subjid = get_subjidstr(subjidstr_all, cl.anno_array)
+
+#4
+
+"""This part tells you how many of the classifications have a 'yes' to the bar qn"""
+
+#isolate anwsers to whether there's a bar and find out how many have a bar
+first_answer = [x[0]['value'] for x in cl.anno_array]
+first_answer_yes = [x[0] for x in cl.anno_array if x[0]['value'] == 'Yes']
+len(first_answer_yes)
+
+#make sure we take the most common answer to whether there's a bar
+bar_answer = [x[0]['value'] for x in cl.anno_array]
+bar_answer_ids = [int(x.keys()[0]) for x in subject_data]
+bar_answer_with_id = pd.DataFrame(zip(bar_answer_ids, bar_answer))
+
+does_galaxy_have_bar = bar_answer_with_id.groupby(0).agg(lambda x: x.value_counts().index[0]).reset_index()
+
+#these are the IDs for all the galaxies that have bars, so more people said there was a bar than not.
+has_bar = [i for h, i in enumerate(does_galaxy_have_bar[0]) if does_galaxy_have_bar[1][h] == 'Yes']
+
+#5
+
+#find out the database the galaxies came from
+database_init = []
+for i in subj_set:
+    if 'IMAGING' in i:
+        database_init.append(i['IMAGING'])
+    else:
+        database_init.append('CANDELS')
+
+database_and_id_init = zip(subject_id, database_init)
+
+database = [(i[0], i[1]) for i in database_and_id_init if i[0] in has_bar and i[0] in subjid]
+
+#sort database so it's in the same order as everything else
+database_sorted = sorted(database)
+
+#6
+
+#is there a ring?
+ring_answer = [i[2]['value'] for i in cl.anno_array if i[0]['value'] == 'Yes' and len(i) > 3 and len(i[3]['value']) > 1]
+ring_answer_id = zip(subjid, ring_answer)
+
+ringed = [j for j in ring_answer_id if j[0] in has_bar]
+
+ring1 = pd.DataFrame(ringed).groupby(0).agg(lambda x: x.value_counts().index[0]).reset_index()
+
+ring = []
+for i in list(ring1[1]):
+    if i == 'Yes':
+        ring.append(1)
+    elif i == 'No':
+        ring.append(0)
+    elif i == 'No ring':
+        ring.append(2)
+
+spiral_arms_answer = [i[1]['value'] for i in cl.anno_array if i[0]['value'] == 'Yes' and len(i) > 3 and len(i[3]['value']) > 1]
+spiral_arms_answer_id = zip(subjid, spiral_arms_answer)
+spiral_there = [y for y in spiral_arms_answer_id if y[0] in has_bar]
+spiral_there2 = pd.DataFrame(spiral_there).groupby(0).agg(lambda x: x.value_counts().index[0]).reset_index()
+spiral_there2.to_csv('/Users/freyapentz/Documents/test.csv')
+
+spiral = []
+for m in list(spiral_there2[1]):
+    if m == 'Yes':
+        spiral.append(1)
+    elif m == 'No':
+        spiral.append(0)
+    elif m == 'No spiral arms':
+        spiral.append(2)
+
+#7
+
+"""This part tells you the average lengths and widths of all the bars in pixels"""
+#define a function that takes coordinates [maybe a list] (four inputs) and gives you the length of the line
+def get_line(m, n, o, p):
+    lengths = []
+    for i in range(len(m)):
+        lengths.append(((m[i] - n[i])**2+(o[i] - p[i])**2)**0.5)
+    return lengths
+
+#gives you all of the x1 values for the first line they draw and put them into a list
+x1w = [float(x[3]['value'][0]['x1']) for x in cl.anno_array if x[0]['value'] == 'Yes' and len(x) > 3 and len(x[3]['value']) > 1]
+
+#same for x2 values
+x2w = [float(x[3]['value'][0]['x2']) for x in cl.anno_array if x[0]['value'] == 'Yes' and len(x) > 3 and len(x[3]['value']) > 1]
+
+#same for y1 values
+y1w = [float(x[3]['value'][0]['y1']) for x in cl.anno_array if x[0]['value'] == 'Yes' and len(x) > 3 and len(x[3]['value']) > 1]
+
+#same for y2 values
+y2w = [float(x[3]['value'][0]['y2']) for x in cl.anno_array if x[0]['value'] == 'Yes' and len(x) > 3 and len(x[3]['value']) > 1]
+
+#do the same for the other line
+x1L = [float(x[3]['value'][1]['x1']) for x in cl.anno_array if x[0]['value'] == 'Yes' and len(x) > 3 and len(x[3]['value']) > 1]
+
+x2L = [float(x[3]['value'][1]['x2']) for x in cl.anno_array if x[0]['value'] == 'Yes' and len(x) > 3 and len(x[3]['value']) > 1]
+
+y1L = [float(x[3]['value'][1]['y1']) for x in cl.anno_array if x[0]['value'] == 'Yes' and len(x) > 3 and len(x[3]['value']) > 1]
+
+y2L = [float(x[3]['value'][1]['y2']) for x in cl.anno_array if x[0]['value'] == 'Yes' and len(x) > 3 and len(x[3]['value']) > 1]
+
+#make a list of all the lengths of the lines, first drawn and second drawn
+length_first_line = get_line(x1w, x2w, y1w, y2w)
+length_second_line = get_line(x1L, x2L, y1L,y2L)
+
+"""compare which of the two lines is shorter and make that the width and make the longer one the length"""
+final_length = []
+final_width = []
+for a, b in zip(length_first_line, length_second_line):
+    if a > b:
+        print a, b
+        final_length.append(float(a))
+        final_width.append(float(b))
+    else:
+        final_length.append(float(b))
+        final_width.append(float(a))
+
+#make dataframes that have all the lengths and widths with their ids- these are in pixels at the moment
+length = pd.DataFrame(np.array([subjid, final_length]).T)
+width = pd.DataFrame(np.array([subjid, final_width]).T)
+lengths_id = pd.DataFrame(subjid).groupby(subjid)
+
+"""get the average line length for each galaxy, length and width"""
+
+length.columns = "subject_id linelength".split()
+width.columns = "subject_id linewidth".split()
+
+#8
+
+#group by the galaxies' ids (subjid), to get all the measurements from one galaxy together
+tt1 = length.groupby(subjid)
+tt2 = width.groupby(subjid)
+
+#use np.mean() to get the average
+df_avglength = tt1.linelength.apply(lambda x: np.mean(x)).reset_index()
+df_avgwidth = tt2.linewidth.apply(lambda x: np.mean(x)).reset_index()
+
+avglength = [j for i, j in enumerate(df_avglength['linelength']) if df_avglength['index'][i] in has_bar]
+avgwidth = [j for i, j in enumerate(df_avgwidth['linewidth']) if df_avgwidth['index'][i] in has_bar]
+
+stddevlength = tt1.linelength.apply(lambda x: np.std(x))
+stddevwidth = tt2.linewidth.apply(lambda x: np.std(x))
+
+"""This part changes lengths from pixels to kpc using redshifts"""
+
+#get the number of arcseconds each bar measurement takes up
+
+#9
+
+arcsecs_lengths = []
+for i, q in enumerate(database_sorted):
+    if q[1] == 'COSMOS' or q[1] == 'CANDELS':
+        arcsecs_lengths.append((avglength[i]*0.05)/1.6)
+    else:
+        arcsecs_lengths.append((avglength[i]*0.03)/1.6)
+
+arcsecs_widths = []
+for o, p in enumerate(database_sorted):
+    if p[1] == 'COSMOS' or p[1] == 'CANDELS':
+        arcsecs_widths.append((avgwidth[o]*0.05)/1.6)
+    else:
+        arcsecs_widths.append((avgwidth[o]*0.03)/1.6)
+#10
+
+#get redshifts out of the file
+def get_redshift(x, y):
+    raw_redshift = []
+    for i, j in enumerate(x):
+        if y[i][0]['value'] == 'Yes' and len(y[i]) > 3 and len(y[i][3]['value']) > 1:
+            raw_redshift.append(float(j.values()[0]['z_use']))
+    return raw_redshift
+raw_z = get_redshift(subject_data, cl.anno_array)
+
+raw_z_subjid = [i for i in zip(subjid, raw_z) if i[0] in has_bar]
+df_raw_z_subjid = pd.DataFrame(raw_z_subjid)
+
+redshift = df_raw_z_subjid.groupby(0).first().reset_index()
+
+redshift_round = [round(item, 10) for item in redshift[1]]
+
+#take away all the (incorrect) negative redshifts - might be useful at some point
+redshift_no_negs = [item for item in redshift[1] if item >= 0]
+
+#get distances from redshifts using the astropy function. Proper distance has been used instead of comoving dist
+
+arcsec_per_kpc = astropy.cosmology.funcs.arcsec_per_kpc_proper(redshift_round).tolist()
+
+"""convert to proper distances i.e. distances in kpc"""
+
+#some of these are not numbers there are some (incorrect) negative redshifts
+width_in_kpc_raw = [x / y for x, y in zip(arcsecs_widths, arcsec_per_kpc)]
+length_in_kpc_raw = [x / y for x, y in zip(arcsecs_lengths, arcsec_per_kpc)]
+
+#take away all the values that are not numbers- must do this now instead of using reshift_no_negs so that the two
+#lists are the same length
+width_in_kpc = [value for value in width_in_kpc_raw if not math.isnan(value)]
+length_in_kpc = [value for value in length_in_kpc_raw if not math.isnan(value)]
+
+#11
+
+#get RA
+def get_ra(x, y):
+    raw_ra = []
+    for i, j in enumerate(x):
+        if y[i][0]['value'] == 'Yes' and len(y[i]) > 3 and len(y[i][3]['value']) > 1:
+            raw_ra.append(float(j.values()[0]['RA']))
+    return raw_ra
+raw_RA = get_ra(subject_data, cl.anno_array)
+
+raw_ra_subjid = [i for i in zip(subjid, raw_RA) if i[0] in list(df_raw_z_subjid[0])]
+df_raw_ra_subjid = pd.DataFrame(raw_ra_subjid)
+RA = df_raw_ra_subjid.groupby(0).first()
+
+#get DEC
+def get_dec(x, y):
+    raw_dec = []
+    for i, j in enumerate(x):
+        if y[i][0]['value'] == 'Yes' and len(y[i]) > 3 and len(y[i][3]['value']) > 1:
+            if 'DEC' in j.values()[0]:
+                raw_dec.append(float(j.values()[0]['DEC']))
+            else:
+                raw_dec.append(float(j.values()[0]['Dec']))
+    return raw_dec
+raw_DEC = get_dec(subject_data, cl.anno_array)
+
+raw_dec_subjid = [i for i in zip(subjid, raw_DEC) if i[0] in list(df_raw_z_subjid[0])]
+df_raw_dec_subjid = pd.DataFrame(raw_dec_subjid)
+DEC = df_raw_dec_subjid.groupby(0).first()
+
+#get absolute mag
+def abs_mag(x, y):
+    abs_mag = []
+    for i, j in enumerate(x):
+        if y[i][0]['value'] == 'Yes' and len(y[i]) > 3 and len(y[i][3]['value']) > 1:
+            if 'ABS_MAG_H_AUTO' in j.values()[0] and j.values()[0]['ABS_MAG_H_AUTO'] != '':
+                abs_mag.append(float(j.values()[0]['ABS_MAG_H_AUTO']))
+            else:
+                abs_mag.append(0)
+    return abs_mag
+raw_abs_mag = abs_mag(subject_data, cl.anno_array)
+raw_abs_mag_subjid = [i for i in zip(subjid, raw_abs_mag) if i[0] in list(df_raw_z_subjid[0])]
+df_raw_abs_mag_subjid = pd.DataFrame(raw_abs_mag_subjid)
+abs_MAG = df_raw_abs_mag_subjid.groupby(0).first().reset_index()
+
+#12
+
+#make an array with all the data in it
+my_array = np.zeros((len(width_in_kpc_raw), 6))
+my_array[:, 0] = (RA[1])
+my_array[:, 1] = (DEC[1])
+my_array[:, 2] = (redshift[1])
+my_array[:, 3] = (length_in_kpc_raw)
+my_array[:, 4] = (width_in_kpc_raw)
+my_array[:, 5] = (abs_MAG[1])
+my_data = pd.DataFrame(my_array)
+my_data['ring'] = ring
+my_data['spiral'] = spiral
+my_data.columns = "RA DEC Z length width absolute_mag ring_presence spiral_arms".split()
+
+#save to file. Now you have a file with pretty much all the data in it which you can now use for TOPCAT or
+#something. Yay!
+
+my_data.to_csv('/Users/freyapentz/Documents/my_data2.csv', index = False)
+
+
+#13
+removed
